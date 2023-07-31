@@ -1,49 +1,8 @@
 clc
-clear all
 close all
 
-% --------------input parameters
-L_half = 30;
-Delta_x = 0.25;
-Pe = 5000;
-InjectionPoint_normalized = 0.5;
-NumRandomWalkers = 500000;
-NumSteps = 50;
-Factor_related_to_delatT = 10;
-IfLinearFitting = 0;
-
-%------------------------------
-Lx = [-L_half:Delta_x:L_half]';
-LengthAll = max(Lx) - min(Lx);
-InjectionPoint = LengthAll * InjectionPoint_normalized + min(Lx);
-
-NumPnts = size(Lx, 1);
-Element = [[1:size(Lx, 1) - 1]', [2:size(Lx, 1)]'];
-NumSubPlot = 2;
-
-% Velocity = zeros(NumPnts - 1, 1) .* 0 +1e-5;
-% Velocity = (1e-10 .* ((Lx(Element(:, 1)) + Lx(Element(:, 2))) .* 0.5 + L_half)) .^ (4);
-Velocity = rand(NumPnts - 1, 1) .* 1e-5;
-
-meanV = mean(Velocity);
-Dm = meanV * L_half * 2 / Pe;
-t_ = Delta_x / meanV;
-deltaT1 = t_ / Factor_related_to_delatT;
-
-deltaT2 = (Delta_x ^ 2) / (2 * Dm) / Factor_related_to_delatT;
-
-deltaT = 0;
-
-if (deltaT2 < deltaT1) % diffusion dominated
-    deltaT = deltaT2;
-else
-    deltaT = deltaT1;
-end
-
-% ----------------for plot
-Height_half = 0.5;
-Pnt_y = [[Lx, zeros(NumPnts, 1) + Height_half]; [Lx, zeros(NumPnts, 1) - Height_half]];
-Element_y = [[1:size(Lx, 1) - 1]', [2:size(Lx, 1)]', [NumPnts + 2:NumPnts * 2]', [NumPnts + 1:NumPnts * 2 - 1]'];
+% run more steps
+NumSteps_continue = 200;
 
 figure(1);
 subplot(NumSubPlot, 1, 1)
@@ -57,27 +16,14 @@ pbaspect([(max(Lx) + 2) * 1, 4, 1]); hold on
 hjk = colorbar;
 hjk.Label.String = 'Velocity [L/T]';
 %-----------------------
-
-% ParticleID, ElementID, Position, Velocity
-RandomWalkerMatrix = zeros(NumRandomWalkers, 4);
-RandomWalkerMatrix([1:NumRandomWalkers], 1) = [1:NumRandomWalkers]';
-
-ElementIDinit = find(Lx >= InjectionPoint, 1);
-RandomWalkerMatrix([1:NumRandomWalkers], 2) = RandomWalkerMatrix([1:NumRandomWalkers], 2) + ElementIDinit;
-RandomWalkerMatrix([1:NumRandomWalkers], 3) = RandomWalkerMatrix([1:NumRandomWalkers], 3) + Lx(ElementIDinit);
-RandomWalkerMatrix([1:NumRandomWalkers], 4) = RandomWalkerMatrix([1:NumRandomWalkers], 4) + Velocity(ElementIDinit);
-
-Concentration = Element(:, 1) .* 0;
-Concentration(ElementIDinit) = 1;
-
 figure(1);
 subplot(NumSubPlot, 1, 2)
-title('Concentration evolves with time (step = 0)');
+title(['Concentration evolves with time (step = ', num2str(NumSteps), ')']);
 xlabel('x (m)'); ylabel('y (m)');
 hold on
 patch('Vertices', Pnt_y, 'Faces', [1, Element_y(end, [2, 3]), Element_y(1, 4)], 'FaceVertexCData', Pnt_y(:, 1), 'FaceColor', 'flat', 'EdgeAlpha', 1, 'facealpha', 0); hold on
 
-spo = patch('Vertices', Pnt_y, 'Faces', Element_y(ElementIDinit, :), 'FaceVertexCData', Concentration(ElementIDinit), 'FaceColor', 'flat', 'EdgeAlpha', 0, 'facealpha', 1); hold on
+% spo = patch('Vertices', Pnt_y, 'Faces', Element_y(ElementIDinit, :), 'FaceVertexCData', Concentration(ElementIDinit), 'FaceColor', 'flat', 'EdgeAlpha', 0, 'facealpha', 1); hold on
 xlim([min(Lx) - 2, max(Lx) + 2])
 ylim([-2, 2])
 pbaspect([(max(Lx) + 2) * 1, 4, 1]); hold on
@@ -85,15 +31,12 @@ caxis([0, 1])
 hjk2 = colorbar;
 hjk2.Label.String = 'Concentration [-]';
 
-disp('Press enter to continue!')
-pause()
+% enlarge the vectors
+VarianceOfX = [VarianceOfX; zeros(NumSteps_continue, 1)];
+E_u = [E_u; zeros(NumSteps_continue, 1)];
+E_u_x = [E_u_x; zeros(NumSteps_continue, 1)];
 
-VarianceOfX = zeros(NumSteps, 1);
-E_u = zeros(NumSteps, 1);
-E_u_x = zeros(NumSteps, 1);
-% E_x = zeros(NumSteps, 1);
-
-for i = 1:NumSteps
+for i = NumSteps + 1:NumSteps + NumSteps_continue
 
     AS = find(RandomWalkerMatrix(:, 1) > 0);
 
@@ -136,14 +79,9 @@ for i = 1:NumSteps
 
     % record expectation of u and x
     VarianceOfX(i) = var(RandomWalkerMatrix(AF, 3));
-    %Tmp_m = sortrows(RandomWalkerMatrix(AF, [3 4]), 1);
-    %E_u(i) = trapz(Tmp_m(:, 1), Tmp_m(:, 2));
     E_u(i) = mean(RandomWalkerMatrix(AF, 4));
-    %Tmp_m(:, 2) = Tmp_m(:, 2) .* Tmp_m(:, 1);
-    % E_u_x(i) = trapz(Tmp_m(:, 1), Tmp_m(:, 2));
     E_u_x(i) = mean(RandomWalkerMatrix(AF, 3) .* RandomWalkerMatrix(AF, 4));
     % E_x(i) = mean(RandomWalkerMatrix(AF, 3));
-    %clear Tmp_m
 
     % ElementID
     CC = RandomWalkerMatrix(AF, 2);
@@ -168,9 +106,12 @@ for i = 1:NumSteps
     pause(0.1)
 end
 
+NumSteps = NumSteps + NumSteps_continue;
+
 TimeRange = [1:NumSteps] .* deltaT;
 figure(2)
 title('Variance vs. Time'); hold on
+xlabel('Time'); ylabel('Variance of x'); hold on
 HYU1 = scatter(TimeRange, VarianceOfX);
 hold on
 %scatter(TimeRange, 2 .* E_u_x' .*TimeRange + 2 * Dm .* TimeRange - E_u' .^ 2 .* TimeRange);
@@ -209,6 +150,11 @@ if (IfLinearFitting == 1)
     disp(['-----------------'])
     legend([HYU1 HYU2], {'Variance vs. time', 'model: 2 Dm t'});
 else
+    % plot(TimeRange, 2 .* TimeRange' .* E_u_x + 2 * Dm .* TimeRange'  - E_u .^ 2 .* TimeRange' .^ 2, 'r-', 'linewidth', 2);
+    %E_u_x_Integrated = zeros(NumSteps, 1);
+    %E_u_Integrated = zeros(NumSteps, 1);
+    %E_x_Integrated = E_x;
+
     E_u_x_Integrated = cumtrapz([1:NumSteps] .* deltaT, E_u_x);
     E_u_Integrated = cumtrapz([1:NumSteps] .* deltaT, E_u);
 
